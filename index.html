@@ -412,6 +412,14 @@ h3{font-size:16px;line-height:1.2;font-weight:700}
   .phone{max-width:none;height:100dvh;min-height:0;border:0;border-radius:0;box-shadow:none}
   .urlbar{display:none}
 }
+
+/* signup polish: centered card preview, even tap targets */
+#qbody .pc{width:100%;max-width:340px;margin-inline:auto}
+.tile{min-height:62px}
+.opt{min-height:52px}
+.pres .stack{flex:none}
+.field{text-align:left}
+#cnameIn{text-align:center}
 </style>
 
 <div id="defs"></div>
@@ -640,7 +648,7 @@ function burst(){
 function meP(){return {anon:me.anon,id:'me',name:me.name||'You',g:me.g,age:me.age,tot:me.tot,hot:me.hot,a1:me.a1,a2:me.a2,photo:me.photo,tone:me.tone,bio:me.showBio?me.bio:'',ig:me.ig}}
 function presHTML(){
   var f=['dana','marcus','aiko','tomas','leah'].map(function(id){return ph(P(id),30)}).join('');
-  return '<span class="stack bl">'+f+'</span><span><b data-crowd>'+S.crowd+'</b> here now at <b style="font-family:var(--body)">'+esc(V(S.venue).n)+'</b></span><span class="dotlive" style="margin-left:auto"></span>';
+  return '<span class="stack bl">'+f+'</span><span><b data-crowd>'+(S.crowd||V(S.venue).now)+'</b> here now at <b style="font-family:var(--body)">'+esc(V(S.venue).n)+'</b></span><span class="dotlive" style="margin-left:auto"></span>';
 }
 function fillPres(){$$('[data-pres]').forEach(function(e){e.innerHTML=presHTML()})}
 
@@ -654,16 +662,20 @@ function show(step){
   if(step==='scan')$('#qr1').innerHTML=qrSVG(11,S.venue.length*31+5);
   if(step==='verify'){var vb=$('#vbtn');vb.disabled=false;vb.textContent='Open Instagram & send';$('#vs3').classList.remove('on','done');$('#vn3').textContent='3';$('#vs3t').textContent='We confirm it automatically';$('#vs3s').textContent='No need to come back and tap anything.'}
   if(step==='profile')buildProfile();
-  if(step==='quiz'){S.qi=0;renderQuiz()}
+  if(step==='quiz'){S.qi=0;renderQuiz();quizBuzz()}
   if(step==='app')startApp();
   fillPres();
+}
+function quizBuzz(){
+  later(1600,function(){if(S.step==='quiz')toast('👀 Dana just checked in at '+V(S.venue).n)});
+  later(7500,function(){if(S.step==='quiz')toast('🔥 '+(V(S.venue).now)+' people are here right now — 3 joined in the last 10 min')});
 }
 function go(step){S.hist.push(S.step);show(step)}
 function back(){var p=S.hist.pop();if(p)show(p)}
 
 /* ---------- intro film (live product demo) ---------- */
 var storyTimer=null,storyIdx=0,curRoot=null;
-var CAPS=[['Scan the table sign','No app. Just your browser.'],['Prove it’s you on IG','Send a code from your own account.'],['See who’s in the room','Blurred until you’re in.'],['Women look first','They choose who sees their profile.'],['Wave. Meet. Both tap.','Then it’s saved with their IG.']];
+var CAPS=[['Scan the table sign','No app. Just your browser.'],['Prove it’s you on IG','Send a code from your own account.'],['See who’s in the room','Blurred until you’re in.'],['Women look first','They choose who sees their profile.'],['Wave. Meet. Both tap.','Say hi in person. That’s the point.']];
 function blob(c,x,y,sz){return '<i class="bgb" style="background:'+c+';left:'+x+'px;top:'+y+'px;width:'+sz+'px;height:'+sz+'px"></i>'}
 function qrBox(sz){return '<div style="width:'+sz+'px;height:'+sz+'px;background:#fff;border-radius:10px;padding:'+Math.round(sz*.1)+'px">'+qrSVG(9,7)+'</div>'}
 var BAR='<div style="position:absolute;left:-10px;right:-10px;bottom:-4px;height:58px;background:linear-gradient(#d9a975,#a3703f);box-shadow:inset 0 3px 0 rgba(255,255,255,.4)"></div>';
@@ -745,7 +757,7 @@ function paintMirror(){
 }
 
 /* ---------- quiz ---------- */
-function stepsQ(){return ['a1','a2','tot','card']}
+function stepsQ(){return ['q','card']}
 function teamHTML(kind,val){
   var pct=kind==='tot'?TOT_PCT:HOT_PCT, a=pct[val], b=100-a;
   var labs=kind==='tot'?{Tacos:['🗣️ Say it all','🎭'],Pizza:['🎭 Keep ’em guessing','🗣️']}:{yes:['✅ Fair game','🙅'],no:['🙅 Rude','✅']};
@@ -756,16 +768,27 @@ function teamHTML(kind,val){
 function renderQuiz(){
   var k=stepsQ()[S.qi],h='',b=$('#qbody');
   var dots='<div class="row" style="gap:6px">'+stepsQ().map(function(_,i){return '<i style="height:6px;flex:1;border-radius:6px;background:'+(i<=S.qi?'var(--coral)':'var(--line)')+'"></i>'}).join('')+'</div>';
-  if(k==='a1'||k==='a2'){
-    var q=QA[k==='a1'?0:1], cur=S.qtmp[k]||{o:-1,t:''};
-    h=dots+'<h2>'+q.title+'</h2>'+q.opts.map(function(o,i){return '<button class="opt" data-a="qopt" data-v="'+i+'" aria-pressed="'+(cur.o===i)+'"><span class="n">'+(i+1)+'</span>'+esc(o)+'</button>'}).join('')+
-      (cur.o>=0?'<textarea class="ta" id="qta" maxlength="80" placeholder="'+esc(q.ph)+'" aria-label="Your answer">'+esc(cur.t)+'</textarea>':'')+
-      '<div class="grow"></div><div class="row"><button class="btn ghost" data-a="qskip" style="flex:1">Skip</button><button class="btn" data-a="qnext" style="flex:2" '+(cur.o>=0&&cur.t.trim()?'':'disabled')+'>Next</button></div>';
-  }else if(k==='tot'){
-    h=dots+'<div class="eyebrow">Tonight at '+esc(V(S.venue).n)+'</div><h2>First date: say it all, or keep them guessing?</h2><div class="tiles"><button class="tile" data-a="tot" data-v="Tacos" aria-pressed="'+(me.tot==='Tacos')+'"><span class="em">🗣️</span>Say it all<small>Cards on the table</small></button><button class="tile" data-a="tot" data-v="Pizza" aria-pressed="'+(me.tot==='Pizza')+'"><span class="em">🎭</span>Keep ’em guessing<small>Mystery is hot</small></button></div>'+
-      (me.tot?teamHTML('tot',me.tot)+'<div class="grow"></div><button class="btn" data-a="qnext">Next</button>':'<p class="muted small" style="text-align:center">See who’s in the room with you.</p>');
+  if(k==='q'){
+    var ready=me.g&&me.a1&&me.tot;
+    h=dots+
+    '<div><div class="eyebrow">I’m a</div><div class="tiles" id="qgtiles" style="margin-top:8px">'+
+      '<button class="tile" data-a="qgender" data-v="M" aria-pressed="'+(me.g==='M')+'">Man<small>meeting women</small></button>'+
+      '<button class="tile" data-a="qgender" data-v="W" aria-pressed="'+(me.g==='W')+'">Woman<small>meeting men</small></button></div></div>'+
+    '<div><div class="eyebrow">Multiple choice</div><h2 style="margin-top:6px">Tonight, I’m here to…</h2><div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">'+
+      [['Meet someone new','💘'],['Make new friends','👋'],['See where the night goes','🌙']].map(function(o){
+        return '<button class="opt" data-a="mc" data-v="'+o[0]+'" aria-pressed="'+(me.a1&&me.a1.a===o[0])+'"><span>'+o[1]+'</span>'+o[0]+'</button>'}).join('')+'</div></div>'+
+    '<div><div class="eyebrow">This or that</div><h2 style="margin-top:6px">First date: say it all, or keep them guessing?</h2><div class="tiles" style="margin-top:10px">'+
+      '<button class="tile" data-a="tot" data-v="Tacos" aria-pressed="'+(me.tot==='Tacos')+'"><span class="em">🗣️</span>Say it all<small>Cards on the table</small></button>'+
+      '<button class="tile" data-a="tot" data-v="Pizza" aria-pressed="'+(me.tot==='Pizza')+'"><span class="em">🎭</span>Keep ’em guessing<small>Slow reveal</small></button></div>'+
+      (me.tot?teamHTML('tot',me.tot):'<p class="muted small" style="text-align:center">See who’s in the room with you.</p>')+'</div>'+
+    '<div class="grow"></div><button class="btn" data-a="qnext" '+(ready?'':'disabled')+'>Next</button>';
   }else{
-    h=dots+'<h2>Your card</h2><p class="muted small" style="margin-top:-8px">This is what they see.</p>'+cardHTML(meP(),'preview')+'<button class="btn coral" data-a="live">Go live at '+esc(V(S.venue).n)+'</button>';
+    h=dots+'<div class="eyebrow">Last step</div><h2>Create your profile</h2><p class="muted small" style="margin-top:-8px">One time only — this is the card people in the room will see.</p>'+
+    '<input class="field" id="cnameIn" value="'+esc(me.name)+'" maxlength="16" aria-label="First name" style="text-align:center;font-weight:700">'+
+    '<div class="pillrow" id="qages">'+AGES.map(function(a){return '<button class="pill" data-a="qage" data-v="'+a+'" aria-pressed="'+(me.age===a)+'">'+a+'</button>'}).join('')+'</div>'+
+    '<div class="row"><label class="btn ghost sm" for="photoIn" style="cursor:pointer;flex:1;text-align:center">📷 Use my own photo</label><span class="muted small" style="flex:1">…or we use your Instagram photo.</span></div>'+
+    cardHTML(meP(),'preview')+
+    '<button class="btn coral" data-a="live">Create profile & go live</button>';
   }
   b.innerHTML=h;
 }
@@ -1011,7 +1034,7 @@ phone.addEventListener('click',function(e){
       me.ig='@'+($('#igin').value.replace(/^@/,'')||'jordan.makes');
       $('#vs3').classList.add('on');$('#vs3t').textContent='Waiting for your DM…';$('#vs3s').textContent='Send the code in Instagram, then come back.';
       later(2200,function(){$('#vs3').classList.add('done');$('#vn3').textContent='✓';$('#vs3t').textContent='Verified. Nice.';$('#vs3s').textContent='Taking you to your profile…';t.innerHTML='✓ Verified';
-        later(900,function(){if(S.step==='verify')go('profile')})});break;
+        later(900,function(){if(S.step==='verify')go('quiz')})});break;
     case 'gender':me.g=v;paintPhoto();if(v==='W')paintFirst();if(!me.custom)me.photo=IGPH[v];me.tone=v==='W'?'#e8707a':'#2E48F0';$$('#gtiles .tile').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.v===v)});$('#profrest').hidden=false;$('#firstrow').hidden=v!=='W';$('#profNext').disabled=false;paintMirror();break;
     case 'age':me.age=v;$$('#ages .pill').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.v===v)});paintMirror();break;
     case 'showbio':me.showBio=!me.showBio;t.setAttribute('aria-checked',me.showBio);$('#bioIn').hidden=!me.showBio;$('#bioIn').value=me.bio;paintMirror();break;
@@ -1020,13 +1043,12 @@ phone.addEventListener('click',function(e){
     case 'openfirst':me.first=!me.first;paintFirst();break;
     case 'first2':setFirst(!me.first);if(S.sk==='sess')sessSheet();else looksSheet();break;
     case 'profnext':me.name=($('#nameIn').value||'Jordan').trim();me.bio=$('#bioIn').value||me.bio;go('quiz');break;
-    case 'qopt':var k=stepsQ()[S.qi],c=S.qtmp[k]||{o:-1,t:''};c.o=+v;S.qtmp[k]=c;renderQuiz();var ta=$('#qta');if(ta)ta.focus();break;
-    case 'qskip':me[stepsQ()[S.qi]]=null;S.qi++;renderQuiz();break;
-    case 'qnext':var k3=stepsQ()[S.qi];
-      if(k3==='a1'||k3==='a2'){var q=QA[k3==='a1'?0:1],cc=S.qtmp[k3];me[k3]={q:q.opts[cc.o],a:cc.t.trim()}}
-      S.qi++;renderQuiz();$('#s-quiz').scrollTop=0;break;
+    case 'qgender':me.g=v;if(!me.custom)me.photo=IGPH[v];me.tone=v==='W'?'#e8707a':'#2E48F0';renderQuiz();break;
+    case 'mc':me.a1={q:'Tonight I’m here to',a:v};renderQuiz();break;
+    case 'qage':var cn0=$('#cnameIn');if(cn0)me.name=cn0.value;me.age=v;renderQuiz();break;
+    case 'qnext':S.qi++;renderQuiz();$('#s-quiz').scrollTop=0;break;
     case 'tot':me.tot=v;renderQuiz();break;
-    case 'live':S.started=false;go('app');break;
+    case 'live':var cnL=$('#cnameIn');if(cnL)me.name=(cnL.value||'Jordan').trim();S.started=false;go('app');break;
     case 'tab':S.tab=v;tabs();break;
     case 'first3':setFirst(!me.first);break;
     case 'tipx':S.tip=false;renderRoom();break;
@@ -1055,19 +1077,18 @@ phone.addEventListener('keydown',function(e){
   if((e.key==='Enter'||e.key===' ')&&e.target.matches('.vdot,.sign,.codebox,.viewf')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}))}
 });
 phone.addEventListener('input',function(e){
-  if(e.target.id==='qta'){var k=stepsQ()[S.qi];S.qtmp[k].t=e.target.value;var nb=$('[data-a="qnext"]');if(nb)nb.disabled=!e.target.value.trim()}
   if(e.target.id==='nameIn'){me.name=e.target.value;paintMirror()}
   if(e.target.id==='bioIn'){me.bio=e.target.value;paintMirror()}
 });
 $('#photoIn').addEventListener('change',function(e){
-  var f=e.target.files&&e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){me.photo=r.result;me.custom=true;paintMirror();if(me.anon)toast('Uploaded. Still hidden from others.')};r.readAsDataURL(f);
+  var f=e.target.files&&e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){me.photo=r.result;me.custom=true;paintMirror();if(S.step==='quiz')renderQuiz();if(me.anon)toast('Uploaded. Still hidden from others.')};r.readAsDataURL(f);
 });
 
 /* ---------- tickers ---------- */
 var tk=0,nextLook=6,fi=0;
 setInterval(function(){
   tk++;sessTick();
-  if(tk%3===0){S.crowd=Math.max(V(S.venue).now-3,Math.min(V(S.venue).now+5,S.crowd+rnd(-1,2)));$$('[data-crowd]').forEach(function(e){e.textContent=S.crowd})}
+  if(tk%3===0){S.crowd=Math.max(V(S.venue).now-3,Math.min(V(S.venue).now+5,(S.crowd||V(S.venue).now)+rnd(-1,2)));$$('[data-crowd]').forEach(function(e){e.textContent=S.crowd})}
   if(tk%5===0){fi=(fi+1)%FEED.length;$$('[data-feed]').forEach(function(e){e.style.opacity=0;setTimeout(function(){e.textContent=FEED[fi];e.style.opacity=1},300)})}
   if(S.step==='app'&&S.visible&&!S.expired&&tk>=nextLook){
     nextLook=tk+rnd(5,9);S.looks++;
