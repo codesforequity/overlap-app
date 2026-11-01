@@ -4,6 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Overlap</title>
+<style>
+/* timed chat */
+.chathead{display:flex;align-items:center;gap:10px}
+.chathead .who{flex:1;min-width:0}
+.chattimer{display:flex;align-items:center;gap:6px;font:700 13px var(--mono);color:var(--coral);white-space:nowrap}
+.chatbar2{height:6px;border-radius:99px;background:#e8e9f2;overflow:hidden}
+.chatbar2 i{display:block;height:100%;background:var(--coral);border-radius:99px;transition:width 1s linear}
+.chatmsgs{display:flex;flex-direction:column;gap:8px;overflow:auto;padding:4px 2px;max-height:300px}
+.msg{max-width:78%;padding:9px 12px;border-radius:18px;font-size:15px;line-height:1.35;background:#fff;border:1px solid #e6e7ef;border-bottom-left-radius:6px}
+.msg.me{align-self:flex-end;background:var(--coral);color:#fff;border-color:var(--coral);border-bottom-left-radius:18px;border-bottom-right-radius:6px}
+.chatrow{display:flex;gap:8px;align-items:stretch}
+.chatrow .field{flex:1;min-width:0}
+.chatlock{text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;padding:8px 0}
+</style>
 </head>
 <body>
 <title>Overlap</title>
@@ -443,7 +457,7 @@ h3{font-size:16px;line-height:1.2;font-weight:700}
           <details><summary><span class="ic">✅</span>Verify with Instagram</summary><div>You DM a one-time code from <b>your own account</b> to @overlap.hq. That proves the account is yours. We never ask for your password.</div></details>
           <details><summary><span class="ic">👀</span>Women look first</summary><div>Women see the men in the room first and choose who gets to see their profile. A woman can also switch on <b>“Let men wave first”</b>. Then men can wave at her, and she decides whether to wave back.</div></details>
           <details><summary><span class="ic">👋</span>Waves and Instagram</summary><div>When a man waves, <b>his Instagram shows on her card</b>, with a peek at his posts. She decides whether to wave back. If she does, her Instagram shows to him. Nobody sees an Instagram without a wave.</div></details>
-          <details><summary><span class="ic">🤝</span>Meet for real</summary><div>When you match, Overlap suggests something to say to start the conversation. Say hi in person, then <b>both tap “I met them”</b>. There’s no chat in the app — the conversation happens in person.</div></details>
+          <details><summary><span class="ic">🤝</span>Meet for real</summary><div>When you match, Overlap suggests something to say to start the conversation. Say hi in person, then <b>both tap “I met them”</b>. A match opens a <b>15-minute chat</b> to find each other. When it locks, the conversation happens in person.</div></details>
           <details><summary><span class="ic">🔒</span>Privacy</summary><div><b>We don’t track your location.</b> The table scan is the only check-in. Venues set how long a session lasts, and you can hide any time. Venues only see headcounts, never who you are.</div></details>
         </div>
         <button class="btn coral" data-a="start">Try it at The Point</button>
@@ -629,7 +643,7 @@ var TOT_PCT={Tacos:44,Pizza:56}, HOT_PCT={yes:61,no:39};
 var me,S,timers=[];
 function fresh(){
   me={anon:false,g:null,name:'Jordan',age:'25–29',photo:null,custom:false,bio:'Boston · coffee, climbing, bad puns',showBio:false,a1:null,a2:null,tot:null,hot:null,sec:[],first:true,ig:'@jordan.makes',tone:'#2E48F0'};
-  S={step:'home',hist:[],venue:'thepoint',end:0,visible:true,expired:false,tab:'room',st:{},metMe:{},met:[],looks:3,lookers:[],badge:{room:0,met:0},qact:['abroad','juggle'],qdone:{},qmsg:{},redeemed:false,nview:'list',mapSel:'thepoint',scanTarget:'copper',crowd:38,qi:0,qtmp:{},tip:true,started:false};
+  S={step:'home',hist:[],venue:'thepoint',end:0,visible:true,expired:false,tab:'room',st:{},metMe:{},met:[],chat:{},chatEnd:{},chatId:null,looks:3,lookers:[],badge:{room:0,met:0},qact:['abroad','juggle'],qdone:{},qmsg:{},redeemed:false,nview:'list',mapSel:'thepoint',scanTarget:'copper',crowd:38,qi:0,qtmp:{},tip:true,started:false};
 }
 fresh();
 function later(ms,fn){timers.push(setTimeout(fn,ms))}
@@ -859,7 +873,7 @@ function cardHTML(p,mode){
     if(st==='matched'){
       igs=igPrev(p)+'<div class="igs">'+igPill(me.ig,'YOURS')+'</div>';
       say='<div class="say"><i>SAY</i>“'+esc(opener(p))+'”</div>';
-      acts=S.metMe[p.id]?'<div class="wait"><i></i>Waiting for '+esc(p.name)+' to tap</div>':'<button class="btn coral" data-a="met" data-id="'+p.id+'">I met them</button>';
+      acts='<button class="btn" data-a="chat" data-id="'+p.id+'"><span class="l">💬 Chat<small>15 min on the clock</small></span></button>'+(S.metMe[p.id]?'<div class="wait"><i></i>Waiting for '+esc(p.name)+' to tap</div>':'<button class="btn coral" data-a="met" data-id="'+p.id+'">I met them</button>');
     }else if(W&&st==='hewaved'){
       igs=igPrev(p)+'<div class="igs">'+igLock(me.ig,'YOURS · LOCKED')+'</div>';
       acts='<button class="btn coral" data-a="waveback" data-id="'+p.id+'"><span class="l">Wave back<small>Shows him your IG</small></span></button><button class="btn ghost" data-a="pass" data-id="'+p.id+'">Pass</button>';
@@ -1004,12 +1018,56 @@ function looksSheet(){
   sheet(h+'<button class="btn ghost" data-close>Close</button>');
 }
 
+/* ---------- timed chat ---------- */
+var CHAT_MS=15*60e3;
+function chatReplies(p){return ['Hey! 👋 Okay, the clock pressure is real lol','I’m '+(p.spot||'near the bar')+' — where are you?','First round’s on me if you find me before it hits zero ⏰']}
+function chatLeft(id){return Math.max(0,(S.chatEnd[id]||0)-Date.now())}
+function chatHTML(id){
+  var p=P(id),left=chatLeft(id),msgs=S.chat[id]||[];
+  var h='<div class="chathead">'+ph(p,44)+'<div class="who"><b>'+esc(p.name)+'</b><div class="muted small">Matched tonight · '+esc(V(S.venue).n)+'</div></div><div class="chattimer">⏱ <span data-chatleft="'+id+'">'+fmt(left)+'</span></div></div>';
+  h+='<div class="chatbar2"><i data-chatbar="'+id+'" style="width:'+Math.round(left/CHAT_MS*100)+'%"></i></div>';
+  if(left<=0){
+    return h+'<div class="chatlock"><div style="font-size:34px">⏰</div><b style="font:800 18px var(--display)">Time’s up</b><p class="muted" style="margin:0">Chat’s locked. You’re in the same bar — go say hi in person.</p>'+igPill(p.ig,'THEIR IG')+'<button class="btn coral" data-a="chatmet" data-id="'+id+'">I met them</button><button class="btn ghost" data-close>Close</button></div>';
+  }
+  h+='<div class="chatmsgs" id="chatmsgs">'+msgs.map(function(m){return '<div class="msg'+(m.from==='me'?' me':'')+'">'+esc(m.text)+'</div>'}).join('')+'</div>';
+  h+='<div class="chatrow"><input class="field" id="chatin" placeholder="Message '+esc(p.name)+' before time runs out…" maxlength="240" data-focus><button class="btn sm" data-a="chatsend" data-id="'+id+'">Send</button></div>';
+  h+='<p class="muted small" style="text-align:center;margin:0">Chat closes when the timer ends. Keep it kind — report from their card.</p>';
+  return h;
+}
+function openChat(id){
+  S.sk='chat';S.chatId=id;
+  if(!S.chat[id]){S.chatEnd[id]=Date.now()+CHAT_MS;S.chat[id]=[{from:'them',text:'We matched 👀 — 15 minutes on the clock. Where are you?'}]}
+  sheet(chatHTML(id));
+  var m=$('#chatmsgs');if(m)m.scrollTop=m.scrollHeight;
+}
+function sendChat(id){
+  var inp=$('#chatin');if(!inp)return;var txt=inp.value.trim();if(!txt)return;
+  if(chatLeft(id)<=0){sheet(chatHTML(id));return}
+  S.chat[id].push({from:'me',text:txt});
+  sheet(chatHTML(id));var m=$('#chatmsgs');if(m)m.scrollTop=m.scrollHeight;
+  var n=S.chat[id].filter(function(x){return x.from==='me'}).length;
+  later(1600,function(){
+    if(chatLeft(id)<=0||!S.chat[id])return;
+    var reps=chatReplies(P(id));
+    S.chat[id].push({from:'them',text:reps[Math.min(n-1,reps.length-1)]});
+    if(S.sk==='chat'&&S.chatId===id&&!$('#sheetwrap').hidden&&$('#chatin')){sheet(chatHTML(id));var mm=$('#chatmsgs');if(mm)mm.scrollTop=mm.scrollHeight}
+  });
+}
+function chatTick(){
+  if(S.sk!=='chat'||!S.chatId||$('#sheetwrap').hidden)return;
+  if(!$('#chatin'))return;
+  var id=S.chatId,left=chatLeft(id),t=$('[data-chatleft="'+id+'"]'),b=$('[data-chatbar="'+id+'"]');
+  if(t)t.textContent=fmt(left);
+  if(b)b.style.width=Math.round(left/CHAT_MS*100)+'%';
+  if(left<=0)sheet(chatHTML(id));
+}
+
 /* ---------- actions ---------- */
 function endCard(){if(S.sk==='card'&&!$('#sheetwrap').hidden)closeSheet()}
 function share(id){var p=P(id);S.st[id]='shared';S.tip=false;render();
   if(p.waves)later(2600,function(){if(S.st[id]==='shared'){S.st[id]='hewaved';notify(p.name+' waved. His IG is on his card');render()}})}
 function wave(id){var p=P(id);S.st[id]='waved';render();toast('Waved. Your IG is on her card now.');
-  if(p.back)later(2800,function(){if(S.st[id]==='waved'){S.st[id]='matched';notify(p.name+' waved back. Her IG is yours');render()}})}
+  if(p.back)later(2800,function(){if(S.st[id]==='waved'){S.st[id]='matched';notify(p.name+' waved back 💬 Chat’s open — 15 min');render()}})}
 function metTap(id){var p=P(id);S.metMe[id]=true;render();
   if(p.metBack)later(2200,function(){if(S.st[id]==='matched'){S.st[id]='met';S.met.unshift({id:id,venue:S.venue});burst();toast('You both tapped 🤝');render()}})}
 function copyCode(){
@@ -1055,9 +1113,12 @@ phone.addEventListener('click',function(e){
     case 'card':S.sk='card';sheet(cardHTML(P(id))+'<button class="btn ghost" data-close>Close</button>');break;
     case 'share':endCard();share(id);break;
     case 'wave':endCard();wave(id);break;
-    case 'waveback':S.st[id]='matched';render();toast('Both IGs unlocked.');break;
+    case 'waveback':S.st[id]='matched';render();toast('It’s a match 💬 Chat’s open — 15 min on the clock');break;
     case 'pass':endCard();S.st[id]='passed';render();break;
     case 'met':metTap(id);break;
+    case 'chat':openChat(id);break;
+    case 'chatsend':sendChat(id);break;
+    case 'chatmet':closeSheet();metTap(id);break;
     case 'looks':looksSheet();break;
     case 'sess':sessSheet();break;
     case 'vis':if(S.expired){closeSheet();S.scanTarget=S.venue;scanSheet();break}S.visible=!S.visible;sessTick();renderRoom();if(!$('#sheetwrap').hidden)sessSheet();break;
@@ -1073,6 +1134,7 @@ phone.addEventListener('click',function(e){
   }
 });
 phone.addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&e.target.id==='chatin'){e.preventDefault();sendChat(S.chatId);return}
   if(e.key==='Escape'&&!$('#sheetwrap').hidden)closeSheet();
   if((e.key==='Enter'||e.key===' ')&&e.target.matches('.vdot,.sign,.codebox,.viewf')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}))}
 });
@@ -1087,7 +1149,7 @@ $('#photoIn').addEventListener('change',function(e){
 /* ---------- tickers ---------- */
 var tk=0,nextLook=6,fi=0;
 setInterval(function(){
-  tk++;sessTick();
+  tk++;sessTick();chatTick();
   if(tk%3===0){S.crowd=Math.max(V(S.venue).now-3,Math.min(V(S.venue).now+5,(S.crowd||V(S.venue).now)+rnd(-1,2)));$$('[data-crowd]').forEach(function(e){e.textContent=S.crowd})}
   if(tk%5===0){fi=(fi+1)%FEED.length;$$('[data-feed]').forEach(function(e){e.style.opacity=0;setTimeout(function(){e.textContent=FEED[fi];e.style.opacity=1},300)})}
   if(S.step==='app'&&S.visible&&!S.expired&&tk>=nextLook){
