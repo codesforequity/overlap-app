@@ -817,6 +817,7 @@ function renderQuiz(){
   }else{
     h=dots+'<div class="eyebrow">Last step</div><h2>Create your profile</h2><p class="muted small" style="margin-top:-8px">One time only — this is the card people in the room will see.</p>'+
     '<input class="field" id="cnameIn" value="'+esc(me.name)+'" maxlength="16" aria-label="First name" style="text-align:center;font-weight:700">'+
+    ((L.on&&testMode())?'<div><div class="eyebrow">Your Instagram</div><input class="field" id="cigIn" value="'+esc(L.igHandle||'')+'" maxlength="31" placeholder="@yourhandle" aria-label="Instagram handle" autocapitalize="off" autocorrect="off" spellcheck="false" style="text-align:center;font-weight:700;margin-top:8px"></div>':'')+
     '<div class="pillrow" id="qages">'+AGES.map(function(a){return '<button class="pill" data-a="qage" data-v="'+a+'" aria-pressed="'+(me.age===a)+'">'+a+'</button>'}).join('')+'</div>'+
     '<div class="row"><label class="btn ghost sm" for="photoIn" style="cursor:pointer;flex:1;text-align:center">📷 Use my own photo</label><span class="muted small" style="flex:1">…or we use your Instagram photo.</span></div>'+
     cardHTML(meP(),'preview')+
@@ -1121,10 +1122,10 @@ phone.addEventListener('click',function(e){
     case 'profnext':me.name=($('#nameIn').value||'Jordan').trim();me.bio=$('#bioIn').value||me.bio;go('quiz');break;
     case 'qgender':me.g=v;if(!me.custom)me.photo=IGPH[v];me.tone=v==='W'?'#e8707a':'#2E48F0';renderQuiz();break;
     case 'mc':me.a1={q:'Tonight I’m here to',a:v};renderQuiz();break;
-    case 'qage':var cn0=$('#cnameIn');if(cn0)me.name=cn0.value;me.age=v;renderQuiz();break;
+    case 'qage':var cn0=$('#cnameIn');if(cn0)me.name=cn0.value;var ci0=$('#cigIn');if(ci0)L.igHandle=ci0.value;me.age=v;renderQuiz();break;
     case 'qnext':S.qi++;renderQuiz();$('#s-quiz').scrollTop=0;break;
     case 'tot':me.tot=v;renderQuiz();break;
-    case 'live':var cnL=$('#cnameIn');if(cnL)me.name=(cnL.value||'Jordan').trim();if(L.on){liveSaveProfile(t);break}S.started=false;go('app');break;
+    case 'live':var cnL=$('#cnameIn');if(cnL)me.name=(cnL.value||'Jordan').trim();if(L.on){if(testMode()){var ciL=$('#cigIn');if(ciL)L.igHandle=ciL.value;if(!igHandleClean()){toast('Add your Instagram handle to go live 📸');break}}liveSaveProfile(t);break}S.started=false;go('app');break;
     case 'lsend':if(L.on)liveSendLink(t);break;
     case 'lrecheck':if(L.on)liveRecheck(true);break;
     case 'lleave':if(L.on)liveLeave();break;
@@ -1194,7 +1195,7 @@ setInterval(function(){
 var SUPA_URL='https://kqlkldqdaqhvcqygngzt.supabase.co', SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxbGtsZHFkYXFodmNxeWduZ3p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzEwOTksImV4cCI6MjEwODgwNzA5OX0.8K7AfL1hc3v9Q1NxNyvkmiFGCRZb_OqQs9BUpUQ05k4';
 var L={on:false,sb:null,token:null,user:null,profile:null,sessionId:null,venueName:'The Point',
   people:[],byId:{},urlCache:{},roomTimer:null,verifyTimer:null,chatTimer:null,chatSig:'',
-  photoFile:null,queueMode:'verify',errAt:0};
+  photoFile:null,queueMode:'verify',errAt:0,test:null,igHandle:''};
 var PX='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 var TONES=['#2E48F0','#FF5B4A','#2FAF86','#8650D0','#F3B53A','#4aa3d8','#e8707a','#5b9a86'];
 
@@ -1212,6 +1213,25 @@ function liveWanted(){
   }catch(e){}
   return false;
 }
+/* TEST MODE — friends test only. Active ONLY when the URL carries
+   BOTH ?venue=<token> AND &test=1 (both flags then persist in
+   sessionStorage, like the venue token). Zero-friction entry: no
+   email — the tester signs in anonymously and the IG handle they
+   type on the profile screen is self-stamped as verified at save
+   time (see liveSaveProfile). That self-stamp is a TEST-ONLY
+   shortcut; it must never ship in a public build. Standard live
+   mode and the demo never call this code path. */
+function testMode(){
+  if(L.test!=null)return L.test;
+  var on=false;
+  try{
+    var q=new URLSearchParams(location.search);
+    if(q.get('test')==='1'&&q.get('venue')){try{sessionStorage.setItem('ov_test','1')}catch(e){}on=true}
+    else if(sessionStorage.getItem('ov_venue')&&sessionStorage.getItem('ov_test')==='1')on=true;
+  }catch(e){}
+  L.test=on;return on;
+}
+function igHandleClean(){return (L.igHandle||'').trim().replace(/^@+/,'').trim()}
 function loadSupa(cb){
   if(window.supabase){cb();return}
   var s=document.createElement('script');
@@ -1235,7 +1255,9 @@ function liveBoot(){
 function liveRoute(){
   L.sb.auth.getSession().then(function(res){
     var session=res.data&&res.data.session;
-    if(!session){show('email');return}
+    if(!session){
+      if(testMode()){liveAnonBoot();return}
+      show('email');return}
     L.user=session.user;
     fetchProfile().then(function(prof){
       L.profile=prof;
@@ -1245,6 +1267,14 @@ function liveRoute(){
       liveCheckIn();
     });
   },function(){show('email')});
+}
+/* ---------- live: anonymous sign-in (TEST MODE only) ---------- */
+function liveAnonBoot(){
+  L.sb.auth.signInAnonymously().then(function(res){
+    if(res.error||!res.data||!res.data.session){toast('⚠️ '+errText(res.error||'Anonymous sign-in failed'));show('email');return}
+    L.user=res.data.session.user;
+    liveRoute();
+  },function(e){toast('⚠️ '+errText(e));show('email')});
 }
 function fetchProfile(){
   if(!L.user)return Promise.resolve(null);
@@ -1322,6 +1352,7 @@ function liveSaveProfile(btn){
     prompts:me.a1?[{q:me.a1.q,a:me.a1.a}]:[],
     this_or_that:me.tot==='Tacos'?'Say it all 🗣️':(me.tot==='Pizza'?'Keep ’em guessing 🎭':null),
     profile_completed_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  if(testMode()){row.instagram_username=igHandleClean();row.instagram_verified_at=new Date().toISOString()}
   L.sb.from('profiles').select('id').eq('id',uid).maybeSingle().then(function(ex){
     if(ex.data)return L.sb.from('profiles').update(row).eq('id',uid);
     return L.sb.from('profiles').insert(Object.assign({id:uid},row));
