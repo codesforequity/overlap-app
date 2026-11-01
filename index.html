@@ -552,6 +552,24 @@ h3{font-size:16px;line-height:1.2;font-weight:700}
         </nav>
       </section>
     </div>
+
+      <section class="screen" id="s-email">
+        <div class="row"><span class="logo"><svg width="32" height="22" viewBox="0 0 30 20"><circle cx="10" cy="10" r="9" fill="#2E48F0" opacity=".92"/><circle cx="20" cy="10" r="9" fill="#FF5B4A" opacity=".92"/></svg>Overlap</span><span class="spacer"></span><span class="tag">Live test</span></div>
+        <h2>Sign in to Overlap</h2>
+        <p class="muted" style="margin-top:-6px">This is the real test build — real accounts, real room. Enter your email and we’ll send you a sign-in link. Tap it on this phone and you’ll come right back here.</p>
+        <input class="field" id="lemail" type="email" placeholder="you@email.com" aria-label="Email" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div class="grow"></div>
+        <p class="muted small" id="lemsg"></p>
+        <button class="btn coral" data-a="lsend">Email me a sign-in link</button>
+      </section>
+
+      <section class="screen" id="s-queue">
+        <div class="row"><span class="logo"><svg width="32" height="22" viewBox="0 0 30 20"><circle cx="10" cy="10" r="9" fill="#2E48F0" opacity=".92"/><circle cx="20" cy="10" r="9" fill="#FF5B4A" opacity=".92"/></svg>Overlap</span><span class="spacer"></span><span class="tag">Live test</span></div>
+        <h2 id="qtitle">You’re in the test queue 🙌</h2>
+        <p class="muted" id="qmsg" style="margin-top:-6px">Your profile is saved. Mitchell/Alfred will approve your account in a sec — this page re-checks every few seconds, or tap Re-check.</p>
+        <div class="grow"></div>
+        <button class="btn" data-a="lrecheck">Re-check</button>
+      </section>
     <div class="sheetwrap" id="sheetwrap" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
     <div class="toast" id="toast" hidden></div>
   </div>
@@ -1106,19 +1124,22 @@ phone.addEventListener('click',function(e){
     case 'qage':var cn0=$('#cnameIn');if(cn0)me.name=cn0.value;me.age=v;renderQuiz();break;
     case 'qnext':S.qi++;renderQuiz();$('#s-quiz').scrollTop=0;break;
     case 'tot':me.tot=v;renderQuiz();break;
-    case 'live':var cnL=$('#cnameIn');if(cnL)me.name=(cnL.value||'Jordan').trim();S.started=false;go('app');break;
+    case 'live':var cnL=$('#cnameIn');if(cnL)me.name=(cnL.value||'Jordan').trim();if(L.on){liveSaveProfile(t);break}S.started=false;go('app');break;
+    case 'lsend':if(L.on)liveSendLink(t);break;
+    case 'lrecheck':if(L.on)liveRecheck(true);break;
+    case 'lleave':if(L.on)liveLeave();break;
     case 'tab':S.tab=v;tabs();break;
     case 'first3':setFirst(!me.first);break;
     case 'tipx':S.tip=false;renderRoom();break;
     case 'card':S.sk='card';sheet(cardHTML(P(id))+'<button class="btn ghost" data-close>Close</button>');break;
-    case 'share':endCard();share(id);break;
-    case 'wave':endCard();wave(id);break;
-    case 'waveback':S.st[id]='matched';render();toast('It’s a match 💬 Chat’s open — 15 min on the clock');break;
+    case 'share':endCard();if(L.on){liveWave(id);break}share(id);break;
+    case 'wave':endCard();if(L.on){liveWave(id);break}wave(id);break;
+    case 'waveback':if(L.on){liveWave(id);break}S.st[id]='matched';render();toast('It’s a match 💬 Chat’s open — 15 min on the clock');break;
     case 'pass':endCard();S.st[id]='passed';render();break;
-    case 'met':metTap(id);break;
+    case 'met':if(L.on){liveMet(id);break}metTap(id);break;
     case 'chat':openChat(id);break;
     case 'chatsend':sendChat(id);break;
-    case 'chatmet':closeSheet();metTap(id);break;
+    case 'chatmet':closeSheet();if(L.on){liveMet(id);break}metTap(id);break;
     case 'looks':looksSheet();break;
     case 'sess':sessSheet();break;
     case 'vis':if(S.expired){closeSheet();S.scanTarget=S.venue;scanSheet();break}S.visible=!S.visible;sessTick();renderRoom();if(!$('#sheetwrap').hidden)sessSheet();break;
@@ -1159,6 +1180,341 @@ setInterval(function(){
     if(S.tab!=='room'){S.badge.room++;badges()}
   }
 },1000);
+
+
+/* ================================================================
+   LIVE MODE — this same UI wired to the real Supabase backend.
+   Active ONLY when (a) the URL carries ?venue=<token> (the venue
+   QR link), or (b) a Supabase auth session already exists on this
+   device. In every other case nothing below runs and the demo
+   behaves exactly as before. Kept dumb and simple on purpose:
+   real accounts -> venue check-in -> real room -> waves/matches
+   -> match chat. No extra features.
+   ================================================================ */
+var SUPA_URL='https://kqlkldqdaqhvcqygngzt.supabase.co', SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxbGtsZHFkYXFodmNxeWduZ3p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzEwOTksImV4cCI6MjEwODgwNzA5OX0.8K7AfL1hc3v9Q1NxNyvkmiFGCRZb_OqQs9BUpUQ05k4';
+var L={on:false,sb:null,token:null,user:null,profile:null,sessionId:null,venueName:'The Point',
+  people:[],byId:{},urlCache:{},roomTimer:null,verifyTimer:null,chatTimer:null,chatSig:'',
+  photoFile:null,queueMode:'verify',errAt:0};
+var PX='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+var TONES=['#2E48F0','#FF5B4A','#2FAF86','#8650D0','#F3B53A','#4aa3d8','#e8707a','#5b9a86'];
+
+function errText(e){var m=(e&&(e.message||e.details))||String(e||'error');return String(m).split('\n')[0].slice(0,90)}
+function liveErrToast(e){var n=Date.now();if(n-L.errAt<30000)return;L.errAt=n;toast('⚠️ '+errText(e))}
+
+function liveWanted(){
+  try{
+    var t=new URLSearchParams(location.search).get('venue');
+    if(t){L.token=t;try{sessionStorage.setItem('ov_venue',t)}catch(e){}return true}
+    try{L.token=sessionStorage.getItem('ov_venue')}catch(e){}
+    if(L.token)return true;
+    var ref=SUPA_URL.split('//')[1].split('.')[0];
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('sb-'+ref+'-auth-token')===0)return true}
+  }catch(e){}
+  return false;
+}
+function loadSupa(cb){
+  if(window.supabase){cb();return}
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+  s.onload=cb;
+  s.onerror=function(){L.on=false;toast('Live mode could not load — showing the demo instead')};
+  document.head.appendChild(s);
+}
+
+/* ---------- live: session routing ---------- */
+function liveBoot(){
+  loadSupa(function(){
+    if(!window.supabase){L.on=false;toast('Live mode could not load — showing the demo instead');return}
+    L.sb=window.supabase.createClient(SUPA_URL,SUPA_ANON);
+    var done=false;
+    var finish=function(){if(done)return;done=true;liveRoute()};
+    try{L.sb.auth.onAuthStateChange(function(){finish()})}catch(e){}
+    setTimeout(finish,1500);
+  });
+}
+function liveRoute(){
+  L.sb.auth.getSession().then(function(res){
+    var session=res.data&&res.data.session;
+    if(!session){show('email');return}
+    L.user=session.user;
+    fetchProfile().then(function(prof){
+      L.profile=prof;
+      if(prof)applyProfileToMe(prof);
+      if(!prof||!prof.profile_completed_at){show('quiz');return}
+      if(!prof.instagram_verified_at){showQueue('verify');startVerifyPoll();return}
+      liveCheckIn();
+    });
+  },function(){show('email')});
+}
+function fetchProfile(){
+  if(!L.user)return Promise.resolve(null);
+  return L.sb.from('profiles').select('*').eq('id',L.user.id).maybeSingle()
+    .then(function(r){return r.data||null},function(){return null});
+}
+function applyProfileToMe(prof){
+  if(prof.display_name&&prof.display_name!=='New member')me.name=prof.display_name;
+  if(prof.gender)me.g=prof.gender==='woman'?'W':'M';
+  if(prof.instagram_username)me.ig='@'+prof.instagram_username;
+  if(prof.this_or_that){if(/say it all/i.test(prof.this_or_that))me.tot='Tacos';else if(/guessing/i.test(prof.this_or_that))me.tot='Pizza'}
+  if(prof.prompts&&prof.prompts.length)me.a1={q:prof.prompts[0].q,a:prof.prompts[0].a};
+}
+
+/* ---------- live: email sign-in ---------- */
+function liveSendLink(btn){
+  var em=($('#lemail').value||'').trim(),msg=$('#lemsg');
+  if(!/.+@.+\..+/.test(em)){msg.textContent='Enter a valid email.';return}
+  btn.disabled=true;btn.textContent='Sending…';
+  var url=location.origin+location.pathname+(L.token?('?venue='+encodeURIComponent(L.token)):'');
+  L.sb.auth.signInWithOtp({email:em,options:{emailRedirectTo:url}}).then(function(res){
+    if(res.error){btn.disabled=false;btn.textContent='Email me a sign-in link';msg.textContent=res.error.message;return}
+    btn.textContent='Link sent ✓';
+    msg.textContent='Check '+em+' — tap the link on this phone and you will land right back here, signed in.';
+  });
+}
+
+/* ---------- live: verification queue (concierge approval) ---------- */
+function showQueue(mode){
+  L.queueMode=mode;
+  var t=$('#qtitle'),m=$('#qmsg');if(!t){show('queue');return}
+  if(mode==='verify'){t.textContent='You’re in the test queue 🙌';m.textContent='Your profile is saved. Mitchell/Alfred will approve your account in a sec — this page re-checks every few seconds, or tap Re-check.'}
+  else if(mode==='room'){t.textContent='You’re approved ✓';m.textContent='The venue session is not open yet. When Mitchell opens it, this page checks you in automatically — or tap Re-check.'}
+  else{t.textContent='Scan the venue sign 📷';m.textContent='Open Overlap from the QR sign at the venue so we know where to check you in.'}
+  show('queue');
+}
+function startVerifyPoll(){stopVerifyPoll();L.verifyTimer=setInterval(function(){liveRecheck(false)},5000)}
+function stopVerifyPoll(){if(L.verifyTimer){clearInterval(L.verifyTimer);L.verifyTimer=null}}
+function liveRecheck(manual){
+  if(L.queueMode==='verify'){
+    fetchProfile().then(function(prof){
+      if(prof&&prof.instagram_verified_at){L.profile=prof;applyProfileToMe(prof);stopVerifyPoll();toast('You’re approved ✓ Checking you in…');liveCheckIn()}
+      else if(manual)toast('Not approved yet — hang tight 🙌');
+    });
+  }else if(L.queueMode==='room'){liveCheckIn()}
+  else if(manual)toast('Open the venue QR link first');
+}
+
+/* ---------- live: profile save (the quiz "card" screen) ---------- */
+function dobForAge(ageStr){
+  var yrs=parseInt(ageStr,10);if(!yrs||yrs<18)yrs=25;
+  var d=new Date();d.setFullYear(d.getFullYear()-yrs);
+  var mm=String(d.getMonth()+1);if(mm.length<2)mm='0'+mm;
+  var dd=String(d.getDate());if(dd.length<2)dd='0'+dd;
+  return d.getFullYear()+'-'+mm+'-'+dd;
+}
+function liveUploadPhoto(uid){
+  var f=L.photoFile;if(!f)return Promise.resolve();
+  if(f.size>5*1024*1024){toast('Photo over 5MB — continuing without it');return Promise.resolve()}
+  var ext=((f.name||'').split('.').pop()||'jpg').toLowerCase();
+  var rid=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('p'+Date.now()+Math.floor(Math.random()*1e9));
+  var path=uid+'/'+rid+'.'+ext;
+  return L.sb.storage.from('profile-photos').upload(path,f,{contentType:f.type||'image/jpeg',upsert:false}).then(function(up){
+    if(up.error){toast('Photo upload failed — continuing without it');return}
+    return L.sb.from('profile_photos').update({is_primary:false}).eq('user_id',uid).eq('is_primary',true).then(function(){
+      return L.sb.from('profile_photos').insert({user_id:uid,storage_path:path,is_primary:true,moderation_status:'approved'});
+    }).then(function(ins){if(ins.error)toast('Photo save failed — continuing without it')});
+  });
+}
+function liveSaveProfile(btn){
+  if(!L.sb||!L.user){toast('Still connecting… try again in a sec');return}
+  btn.disabled=true;btn.textContent='Saving…';
+  var uid=L.user.id,failed=false;
+  var row={display_name:(me.name||'You').slice(0,60),date_of_birth:dobForAge(me.age),gender:(me.g==='W'?'woman':'man'),
+    prompts:me.a1?[{q:me.a1.q,a:me.a1.a}]:[],
+    this_or_that:me.tot==='Tacos'?'Say it all 🗣️':(me.tot==='Pizza'?'Keep ’em guessing 🎭':null),
+    profile_completed_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  L.sb.from('profiles').select('id').eq('id',uid).maybeSingle().then(function(ex){
+    if(ex.data)return L.sb.from('profiles').update(row).eq('id',uid);
+    return L.sb.from('profiles').insert(Object.assign({id:uid},row));
+  }).then(function(res){
+    if(res&&res.error){failed=true;btn.disabled=false;btn.textContent='Create profile & go live';toast('⚠️ '+errText(res.error))}
+  }).then(function(){
+    if(failed)return null;
+    return liveUploadPhoto(uid);
+  }).then(function(){
+    if(failed)return;
+    btn.disabled=false;btn.textContent='Create profile & go live';
+    fetchProfile().then(function(prof){
+      L.profile=prof;if(prof)applyProfileToMe(prof);
+      if(prof&&prof.instagram_verified_at)liveCheckIn();
+      else{showQueue('verify');startVerifyPoll()}
+    });
+  });
+}
+
+/* ---------- live: check-in + room ---------- */
+function liveCheckIn(){
+  if(!L.token){showQueue('notoken');return}
+  L.sb.rpc('check_in_with_venue_token',{p_token:L.token}).then(function(res){
+    if(res.error){
+      var c=errText(res.error);
+      if(c.indexOf('venue_session_not_open')>=0){showQueue('room');startVerifyPoll()}
+      else if(c.indexOf('instagram_not_verified')>=0){showQueue('verify');startVerifyPoll()}
+      else if(c.indexOf('profile_incomplete')>=0){stopVerifyPoll();show('quiz')}
+      else toast('⚠️ '+c);
+      return;
+    }
+    stopVerifyPoll();
+    var ci=res.data;L.sessionId=ci.venue_session_id;
+    S.end=Date.parse(ci.expires_at)||(Date.now()+3*3600e3);
+    L.sb.from('venues').select('name').eq('id',ci.venue_id).maybeSingle().then(function(v){
+      if(v.data&&v.data.name){L.venueName=v.data.name;var hv=$('#hv');if(hv&&S.step==='app')hv.textContent=L.venueName}
+    });
+    show('app');
+  });
+}
+function liveStartApp(){
+  S.visible=true;S.expired=false;S.tab='room';S.started=true;
+  $('#hv').textContent=L.venueName||'The Point';$('#hvs').textContent='Live test';
+  tabs();render();liveFetchRoom();
+  if(!L.roomTimer)L.roomTimer=setInterval(function(){if(S.step==='app'&&L.sessionId)liveFetchRoom()},10000);
+}
+function signUrl(path){
+  if(!path)return Promise.resolve(null);
+  var c=L.urlCache[path];if(c&&c.exp>Date.now())return Promise.resolve(c.url);
+  return L.sb.storage.from('profile-photos').createSignedUrl(path,3600).then(function(r){
+    var u=r.data&&r.data.signedUrl;if(u)L.urlCache[path]={url:u,exp:Date.now()+3300e3};return u||null;
+  },function(){return null});
+}
+function mapRow(r,url){
+  var pr=Array.isArray(r.prompts)?r.prompts:[];
+  var totRaw=r.this_or_that||'',tot=null;
+  if(totRaw==='Tacos'||/say it all/i.test(totRaw))tot='Tacos';
+  else if(totRaw==='Pizza'||/guessing/i.test(totRaw))tot='Pizza';
+  var a1=pr.length?{q:pr[0].q,a:pr[0].a}:{q:'Tonight',a:'Meeting people'};
+  var a2=pr.length>1?{q:pr[1].q,a:pr[1].a}:((totRaw&&!tot)?{q:'This or that',a:totRaw}:null);
+  var st=r.is_match?'matched':((r.has_waved_at_you&&!r.you_waved_at_them)?'hewaved':(r.you_waved_at_them?'waved':'idle'));
+  S.st[r.user_id]=st;
+  var h=0;for(var i=0;i<r.user_id.length;i++)h=(h*31+r.user_id.charCodeAt(i))>>>0;
+  return {id:r.user_id,name:r.display_name,g:(r.gender==='woman'?'W':'M'),age:'',bio:r.bio||'',tot:tot,hot:null,
+    a1:a1,a2:a2,ig:(r.instagram_username?'@'+r.instagram_username:null),
+    imgs:[url||PX],img:(url||PX),tone:TONES[h%TONES.length],matchId:r.match_id||null,anon:false,posts:[]};
+}
+function liveFetchRoom(){
+  if(!L.sb||!L.sessionId)return;
+  L.sb.rpc('get_room_people',{p_session_id:L.sessionId}).then(function(res){
+    if(res.error){liveErrToast(res.error);return}
+    var rows=(res.data||[]).filter(function(r){return r.user_id!==L.user.id});
+    Promise.all(rows.map(function(r){return signUrl(r.primary_photo_path).then(function(u){return mapRow(r,u)})})).then(function(people){
+      L.people=people;L.byId={};people.forEach(function(p){L.byId[p.id]=p});
+      if(S.step==='app')render();
+    });
+  });
+}
+function liveRenderRoom(){
+  var el=$('#pane-room');if(!el)return;
+  if(S.expired){el.innerHTML='<div class="lockbox"><h2>Session ended</h2><p class="muted">This venue session is over.</p><button class="btn" data-a="lleave">Back to start</button></div>';return}
+  if(!L.sessionId){el.innerHTML='<div class="lockbox"><h2>Checking you in…</h2><p class="muted">One sec.</p></div>';return}
+  var h='<div class="feed"><span class="dotlive"></span><span class="t">'+esc(L.venueName)+' · live · '+L.people.length+' in the room</span></div>';
+  var matched=[],inbound=[],waiting=[],browse=[];
+  L.people.forEach(function(p){var st=S.st[p.id];
+    if(st==='matched')matched.push(p);else if(st==='hewaved')inbound.push(p);else if(st==='waved')waiting.push(p);else browse.push(p)});
+  if(matched.length)h+='<div class="sect">Matched</div>'+matched.map(function(p){return cardHTML(p)}).join('');
+  if(inbound.length)h+='<div class="sect">Waved at you</div>'+inbound.map(function(p){return cardHTML(p)}).join('');
+  if(browse.length)h+='<div class="sect">Here now</div>'+browse.map(function(p){return cardHTML(p,'row')}).join('');
+  if(waiting.length)h+='<div class="sect">Waiting</div>'+waiting.map(function(p){return cardHTML(p,'row')}).join('');
+  if(!L.people.length)h+='<div class="radar"><div class="r"><span style="font-size:34px">🎉</span></div><b style="font:800 18px var(--display)">You’re in</b><span class="muted small">Nobody else has checked in yet. As people scan the sign and get approved, they show up here automatically.</span></div>';
+  var sc=el.scrollTop;el.innerHTML=h;el.scrollTop=sc;
+}
+function liveRenderOut(){
+  var el=$('#pane-out');if(!el)return;
+  el.innerHTML='<div style="padding:22px 4px"><h2>'+esc(L.venueName)+'</h2><p class="muted">You’re checked in here. To switch venues, scan that venue’s sign.</p></div>';
+}
+
+/* ---------- live: waves, matches, met ---------- */
+function liveWave(id){
+  var p=L.byId[id];if(!p||!L.sessionId)return;
+  L.sb.rpc('send_wave',{p_recipient_id:id,p_session_id:L.sessionId}).then(function(res){
+    if(res.error){toast('⚠️ '+errText(res.error));return}
+    if(res.data&&res.data.matched){S.st[id]='matched';if(res.data.match_id)p.matchId=res.data.match_id;burst();toast('It’s a match 💬 Say hi — chat’s open')}
+    else{S.st[id]='waved';toast('Waved 👋')}
+    render();liveFetchRoom();
+  });
+}
+function liveMet(id){
+  var p=L.byId[id];if(!p||!p.matchId){toast('No match yet');return}
+  L.sb.rpc('confirm_met',{p_match_id:p.matchId}).then(function(res){
+    if(res.error){toast('⚠️ '+errText(res.error));return}
+    S.metMe[id]=true;toast('You tapped 🤝');render();
+  });
+}
+
+/* ---------- live: real chat on a match ---------- */
+function liveStopChatPoll(){if(L.chatTimer){clearInterval(L.chatTimer);L.chatTimer=null}}
+function liveOpenChat(id){
+  var p=L.byId[id];if(!p)return;
+  if(!p.matchId){toast('Match first — then you can chat');return}
+  S.sk='chat';S.chatId=id;
+  if(!S.chatEnd[id])S.chatEnd[id]=Date.now()+CHAT_MS;
+  if(!S.chat[id])S.chat[id]=[];
+  L.chatSig='';
+  sheet(chatHTML(id));
+  liveFetchMessages(id);
+  liveStopChatPoll();
+  L.chatTimer=setInterval(function(){
+    if($('#sheetwrap').hidden||S.sk!=='chat'||S.chatId!==id){liveStopChatPoll();return}
+    liveFetchMessages(id);
+  },3000);
+}
+function liveFetchMessages(id){
+  var p=L.byId[id];if(!p||!p.matchId||!L.sb)return;
+  L.sb.rpc('get_messages',{p_match_id:p.matchId,p_limit:100}).then(function(res){
+    if(res.error)return;
+    var rows=res.data||[];
+    var sig=rows.length+':'+(rows.length?rows[rows.length-1].id:'');
+    if(sig===L.chatSig)return;
+    L.chatSig=sig;
+    S.chat[id]=rows.map(function(m){return{from:(m.sender_id===L.user.id?'me':'them'),text:m.body}});
+    if(S.sk==='chat'&&S.chatId===id&&!$('#sheetwrap').hidden){
+      var box=$('#chatmsgs');
+      if(box){box.innerHTML=S.chat[id].map(function(m){return '<div class="msg'+(m.from==='me'?' me':'')+'">'+esc(m.text)+'</div>'}).join('');box.scrollTop=box.scrollHeight}
+    }
+  });
+}
+function liveSendChat(id){
+  var inp=$('#chatin');if(!inp)return;
+  var txt=inp.value.trim();if(!txt)return;
+  if(chatLeft(id)<=0){sheet(chatHTML(id));return}
+  var p=L.byId[id];if(!p||!p.matchId)return;
+  inp.value='';
+  L.sb.rpc('send_message',{p_match_id:p.matchId,p_body:txt}).then(function(res){
+    if(res.error){toast('⚠️ '+errText(res.error));var i2=$('#chatin');if(i2&&!i2.value)i2.value=txt;return}
+    L.chatSig='';liveFetchMessages(id);
+  });
+}
+
+/* ---------- live: session sheet + leave ---------- */
+function liveSessSheet(){
+  S.sk='sess';
+  var left=Math.max(0,S.end-Date.now());
+  sheet('<h2>'+esc(L.venueName)+'</h2><p class="muted" style="text-align:center">You’re checked in · '+fmt(left)+' left in this session</p>'+
+    '<button class="btn coral" data-a="lleave">Leave room</button><button class="btn ghost" data-close>Close</button>');
+}
+function liveLeave(){
+  liveStopChatPoll();stopVerifyPoll();
+  if(L.roomTimer){clearInterval(L.roomTimer);L.roomTimer=null}
+  closeSheet();
+  var done=function(){L.sessionId=null;S.expired=false;toast('You left the room 👋');show('home')};
+  if(L.sb&&L.user)L.sb.rpc('end_checkin',{}).then(done,done);
+  else done();
+}
+
+/* ---------- live: wrap the demo entry points (demo stays default) ---------- */
+var _renderRoom=renderRoom;renderRoom=function(){if(L.on){liveRenderRoom();return}_renderRoom()};
+var _renderOut=renderOut;renderOut=function(){if(L.on){liveRenderOut();return}_renderOut()};
+var _startApp=startApp;startApp=function(){if(L.on){liveStartApp();return}_startApp()};
+var _quizBuzz=quizBuzz;quizBuzz=function(){if(L.on)return;_quizBuzz()};
+var _sessSheet=sessSheet;sessSheet=function(){if(L.on){liveSessSheet();return}_sessSheet()};
+var _openChat=openChat;openChat=function(id){if(L.on){liveOpenChat(id);return}_openChat(id)};
+var _sendChat=sendChat;sendChat=function(id){if(L.on){liveSendChat(id);return}_sendChat(id)};
+var _P=P;P=function(id){return L.byId[id]||_P(id)};
+
+/* ---------- live: boot (only when a venue link or session exists) ---------- */
+if(liveWanted()){
+  L.on=true;
+  var pi0=$('#photoIn');
+  if(pi0)pi0.addEventListener('change',function(){if(pi0.files&&pi0.files[0])L.photoFile=pi0.files[0]});
+  liveBoot();
+}
 
 paintRoom();
 show('home');
